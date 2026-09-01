@@ -1,0 +1,12 @@
+path: ./DataSet
+
+train: train/images
+val: val/images
+test: test/images
+
+nc: 3
+
+names:
+  0: person
+  1: motor_vehicle
+  2: non_motor_vehicle

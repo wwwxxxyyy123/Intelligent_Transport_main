@@ -1,0 +1,25 @@
+# ============================================================
+# 智能交通检测系统 - 依赖清单
+# 安装: pip install -r requirements.txt
+# 注意: GPU 加速请按 README 说明安装 CUDA 版 PyTorch 与 onnxruntime-gpu
+# ============================================================
+
+# GUI 界面
+PyQt5>=5.15.9
+pyqtgraph>=0.13.3
+
+# 视觉处理与模型推理
+numpy>=1.24.0
+opencv-python>=4.8.0
+onnxruntime>=1.16.0          # CPU 推理；GPU 环境请卸载后改装 onnxruntime-gpu
+ultralytics>=8.4.123         # 项目已内置修改版 ultralytics/，运行时优先使用内置版本
+
+# 训练（可选，仅重新训练模型时需要）
+# torch>=2.0.0               # GPU 版安装见 https://pytorch.org/get-started/locally/
+
+# 配置与密钥
+PyYAML>=6.0
+python-dotenv>=1.0.0
+
+# 大语言模型（AI 分析）
+openai>=1.0.0

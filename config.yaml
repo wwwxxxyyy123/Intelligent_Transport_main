@@ -1,0 +1,42 @@
+# ============================================================
+# 智能交通检测系统 - 全局配置文件
+# 前端/后端所有可调参数均在此统一管理，程序启动时读取
+# ============================================================
+
+system:
+  app_name: "智能交通检测系统"   # 主窗口标题
+  window_size: [1280, 800]        # 启动时窗口尺寸 [宽, 高]
+
+# ---- 模型相关参数（后端推理使用）----
+model:
+  weights: "runs/detect/runs/train/ghost-p2-lh-yolo11n/weights/best.onnx"  # ONNX 模型路径（由 best.pt 导出）
+  image_size: 640                 # 推理图像尺寸
+  device: "auto"                  # auto / cpu / 0(GPU)
+  conf_threshold: 0.25            # 置信度阈值
+  iou_threshold: 0.45             # NMS 的 IoU 阈值
+
+# ---- 跟踪参数（后端视频跟踪使用）----
+tracking:
+  tracker: "bytetrack.yaml"        # bytetrack.yaml(快) / botsort.yaml(带 ReID 更稳)
+
+# ---- 交通统计参数 ----
+traffic:
+  flow_window_seconds: 1.0         # 流量统计窗口时长(秒)，即统计最近 N 秒内进入区域的车辆数
+  congestion_threshold: 5          # 拥堵阈值，区域内目标数量大于该值时区域变红提示拥堵（左侧面板可实时调整）
+
+# ---- 大语言模型参数 ----
+llm:
+  model: "agnes-2.0-flash"          # 模型名称（对应 .env 中的 AGNES_BASE_URL 端点）
+  analysis_interval: 10.0           # 视频跟踪时每隔多少秒自动触发一次 AI 分析
+  max_frames_for_analysis: 300       # 最多用最近 N 帧的统计数据做分析（避免 token 过多）
+  enable_auto_analysis: true         # 是否自动分析（false 时需手动点"AI 分析"按钮）
+
+# ---- 显示参数 ----
+display:
+  width: 1280                      # 视频帧发送到前端前的缩放宽度(像素)，降低 QImage/信号开销；原图推理不受影响
+
+# ---- 类别配置（需与 data.yaml 一致，仅作展示参考用）----
+classes:
+  0: "行人"
+  1: "机动车"
+  2: "非机动车"
