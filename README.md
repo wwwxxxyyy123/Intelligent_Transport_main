@@ -1,7 +1,5 @@
 # 智能交通检测系统
 
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](./LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.9%2B-green.svg)](https://www.python.org/)
 
 基于 **YOLO11 + ByteTrack + PyQt5** 的桌面端智能交通检测系统，支持视频/图像目标检测与多目标跟踪、区域流量统计、拥堵预警、实时曲线绘制，并集成大语言模型（LLM）对交通状况进行智能分析。
 
@@ -39,17 +37,14 @@
 ### 1. 克隆仓库
 
 ```bash
-git clone https://github.com/<your-username>/Intelligent-Transport.git
+git clone https://github.com/wwwxxxyyy123/Intelligent_Transport_main.git
 cd Intelligent-Transport
 ```
 
 ### 2. 创建虚拟环境并安装依赖
 
 ```bash
-python -m venv venv
-venv\Scripts\activate          # Windows
-# source venv/bin/activate     # Linux/macOS
-
+cpnda create -n intelligent_transport python=3.10
 pip install -r requirements.txt
 ```
 
