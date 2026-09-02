@@ -63,23 +63,24 @@ class Detector:
 
     @staticmethod
     def draw_detections(image, detections):
-        """在图像上绘制检测结果：每个目标按类别颜色的 1px 细框 + 类别+置信度标签。
+        """在图像上绘制检测结果：每个目标按类别颜色的 1px 细框 + 置信度标签。
 
-        与视频跟踪的目标框样式保持一致（细框+类别色），原地绘制返回同一图像。
+        标签视觉：目标框颜色打底，白色文字，位于 bbox 上方，仅显示置信度。
+        原地绘制返回同一图像。
         """
         for d in detections:
             x1, y1, x2, y2 = d['bbox']
             color = class_color(d['class_id'])
             cv2.rectangle(image, (int(x1), int(y1)), (int(x2), int(y2)), color, 1)
-            # bbox 上方标注 "类别 置信度"
-            label = f"{d['class_name']} {d['confidence']:.2f}"
+            # bbox 上方仅标注置信度（框色打底 + 白字），类别由框颜色区分
+            label = f"{d['confidence']:.2f}"
             (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
             cv2.rectangle(image,
                          (int(x1), int(y1) - th - 6),
                          (int(x1) + tw + 4, int(y1) - 2),
-                         (0, 0, 0), -1)
+                         color, -1)
             cv2.putText(image, label, (int(x1) + 2, int(y1) - 4),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         return image
 
     @staticmethod

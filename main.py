@@ -48,13 +48,19 @@ COLOR_TEXT_INVERT  = "#ffffff"   # 反色文字（按钮上）
 COLOR_BORDER       = "#e5e7eb"   # 常规分隔线/边框
 COLOR_BORDER_SOFT  = "#f3f4f6"   # 卡片内部软分割
 
+# 按钮统一配色（深海蓝 + 柔奶白）
+COLOR_BTN_BG       = "#1e3a5f"   # 深海蓝（按钮统一底色）
+COLOR_BTN_HV       = "#15293e"   # 深海蓝-悬停
+COLOR_BTN_PD       = "#0f1f30"   # 深海蓝-按下
+COLOR_BTN_TEXT     = "#f5f0e6"   # 柔奶白（按钮文字）
+
 # 字号体系
 FONT_FAMILY     = "Microsoft YaHei UI"   # Windows 原生清晰无锯齿
 FONT_SIZE_BASE  = 13   # 正文（按钮、表格、标签）
-FONT_SIZE_LABEL = 12   # 次级标签（如"区域内数量>"）
-FONT_SIZE_NUM   = 15   # 统计数值
-FONT_SIZE_TITLE = 14   # 卡片内子标题
-FONT_SIZE_HEAD  = 15   # 面板大标题
+FONT_SIZE_LABEL = 13   # 次级标签
+FONT_SIZE_NUM   = 18   # 统计数值（加大）
+FONT_SIZE_TITLE = 15   # 卡片内子标题
+FONT_SIZE_HEAD  = 16   # 面板大标题
 
 # 圆角/间距基准
 RADIUS_CARD     = 8    # 卡片面板圆角
@@ -131,51 +137,31 @@ QFrame#dividerSoft {{
     min-height: 1px;
 }}
 
-/* ============== 主按钮样式：按 objectName 区分颜色 ============== */
-QPushButton[btnRole="primary"] {{
-    background-color: {COLOR_PRIMARY};
-    color: {COLOR_TEXT_INVERT};
-    border: 1px solid {COLOR_PRIMARY_HV};
-    border-radius: {RADIUS_BTN}px;
-    font-weight: 600;
-    padding: 7px 14px;
-    min-height: 20px;
-}}
-QPushButton[btnRole="primary"]:hover   {{ background-color: {COLOR_PRIMARY_HV}; }}
-QPushButton[btnRole="primary"]:pressed {{ background-color: {COLOR_PRIMARY_PD}; }}
-
-QPushButton[btnRole="accent"] {{
-    background-color: {COLOR_ACCENT};
-    color: {COLOR_TEXT_INVERT};
-    border: 1px solid {COLOR_ACCENT_HV};
-    border-radius: {RADIUS_BTN}px;
-    font-weight: 600;
-    padding: 7px 14px;
-    min-height: 20px;
-}}
-QPushButton[btnRole="accent"]:hover   {{ background-color: {COLOR_ACCENT_HV}; }}
-
-QPushButton[btnRole="warn"] {{
-    background-color: {COLOR_WARN};
-    color: {COLOR_TEXT_INVERT};
-    border: 1px solid {COLOR_WARN_HV};
-    border-radius: {RADIUS_BTN}px;
-    font-weight: 600;
-    padding: 7px 14px;
-    min-height: 20px;
-}}
-QPushButton[btnRole="warn"]:hover   {{ background-color: {COLOR_WARN_HV}; }}
-
+/* ============== 主按钮样式（深海蓝统一配色） ============== */
+QPushButton[btnRole="primary"],
+QPushButton[btnRole="accent"],
+QPushButton[btnRole="warn"],
 QPushButton[btnRole="danger"] {{
-    background-color: {COLOR_DANGER};
-    color: {COLOR_TEXT_INVERT};
-    border: 1px solid {COLOR_DANGER_HV};
+    background-color: {COLOR_BTN_BG};
+    color: {COLOR_BTN_TEXT};
+    border: 1px solid {COLOR_BTN_HV};
     border-radius: {RADIUS_BTN}px;
     font-weight: 600;
     padding: 7px 14px;
     min-height: 20px;
 }}
-QPushButton[btnRole="danger"]:hover   {{ background-color: {COLOR_DANGER_HV}; }}
+QPushButton[btnRole="primary"]:hover,
+QPushButton[btnRole="accent"]:hover,
+QPushButton[btnRole="warn"]:hover,
+QPushButton[btnRole="danger"]:hover {{
+    background-color: {COLOR_BTN_HV};
+}}
+QPushButton[btnRole="primary"]:pressed,
+QPushButton[btnRole="accent"]:pressed,
+QPushButton[btnRole="warn"]:pressed,
+QPushButton[btnRole="danger"]:pressed {{
+    background-color: {COLOR_BTN_PD};
+}}
 
 QPushButton:disabled {{
     background-color: {COLOR_BG_HOVER} !important;

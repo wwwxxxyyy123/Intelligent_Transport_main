@@ -21,14 +21,15 @@ import numpy as np
 
 # 类别颜色调色板（BGR）：对比鲜明，目标框本身颜色明显易辨
 # 按类 id 顺序分配；超出范围的类循环复用
+# 类别映射（config.yaml）: 0=行人 1=机动车 2=非机动车（绿色）
 CLASS_COLORS = [
-    (0, 0, 255),      # 红
-    (255, 0, 0),      # 蓝
-    (0, 255, 255),    # 黄
+    (0, 0, 255),      # 0 行人: 红
+    (255, 0, 0),      # 1 机动车: 蓝
+    (0, 200, 0),      # 2 非机动车: 绿
     (255, 0, 255),    # 紫
     (0, 165, 255),    # 橙
     (255, 255, 0),    # 青
-    (0, 200, 0),      # 绿
+    (0, 255, 255),    # 黄
     (200, 0, 0),      # 暗蓝
 ]
 
@@ -80,8 +81,9 @@ class FlowCounter:
         # ---- 停留时间追踪 ----
         self._enter_frame = {}    # track_id -> 进入区域时的帧号
         self._dwell_times = []    # 已完成停留时间（秒）
-        # 当前帧每个区域内在目标的标注信息（bbox + 停留秒数），供 draw_overlay 标注
-        self._track_dwell = {}    # track_id -> {'bbox': bbox, 'dwell': 秒}
+        # 目标状态追踪：所有"进入过区域"的目标（进入时加入列表，离开后保留并
+        # 把当前位置置为"离开区域"，停留时间冻结），供目标列表动态更新
+        self._track_status = {}   # tid -> {'inside': bool, 'class_id', 'confidence', 'dwell'}
 
     def reset(self):
         """重置所有计数与状态（区域/面积参数不变）。"""
@@ -91,7 +93,7 @@ class FlowCounter:
         self._inflow_events.clear()
         self._enter_frame.clear()
         self._dwell_times.clear()
-        self._track_dwell.clear()
+        self._track_status.clear()
 
     def update(self, tracks, frame_idx):
         """处理一帧 tracks，更新累计指标并返回当前统计字典。
@@ -102,7 +104,6 @@ class FlowCounter:
         """
         cur_inside = 0
         cur_inside_ids = set()
-        self._track_dwell.clear()   # 每帧重建标注信息
 
         for t in tracks:
             tid = t.get('track_id', -1)
@@ -119,17 +120,23 @@ class FlowCounter:
                 self.outflow += 1
                 ef = self._enter_frame.pop(tid, None)
                 if ef is not None:
-                    self._dwell_times.append((frame_idx - ef) / self.fps)
+                    dwell = (frame_idx - ef) / self.fps
+                    self._dwell_times.append(dwell)
+                    # 离开区域：冻结最终停留时间，位置置为"离开区域"
+                    if tid in self._track_status:
+                        self._track_status[tid]['inside'] = False
+                        self._track_status[tid]['dwell'] = dwell
 
             self._prev_inside[tid] = inside
             if inside:
                 cur_inside += 1
                 cur_inside_ids.add(tid)
-                # 记录区域内目标的 bbox/类别/停留时间，供 draw_overlay 标注停留时间
+                # 区域内目标：实时更新停留时间与最新类别/置信度（首次进入即加入列表）
                 ef = self._enter_frame.get(tid, frame_idx)
-                self._track_dwell[tid] = {
-                    'bbox': t['bbox'],
+                self._track_status[tid] = {
+                    'inside': True,
                     'class_id': t.get('class_id', 0),
+                    'confidence': float(t.get('confidence', 0.0)),
                     'dwell': (frame_idx - ef) / self.fps,
                 }
 
@@ -161,8 +168,9 @@ class FlowCounter:
             'current_time': frame_idx / self.fps,          # 当前视频时间(秒)
             'total_time': self.total_frames / self.fps,    # 总时长(秒)
             'system_time': datetime.now().strftime('%H:%M:%S'),  # 当前系统时间
-            # 每个区域内目标的停留时间标注 {tid: {'bbox', 'dwell'}}
-            'track_dwells': {tid: dict(info) for tid, info in self._track_dwell.items()},
+            # 所有进入过区域的目标状态 {tid: {'inside', 'class_id', 'confidence', 'dwell'}}
+            # 区域内目标实时更新；离开区域的目标保留（位置=离开区域，停留时间冻结）
+            'track_status': {tid: dict(info) for tid, info in self._track_status.items()},
         }
 
     def _is_inside(self, bbox):
@@ -175,17 +183,21 @@ class FlowCounter:
         return cv2.pointPolygonTest(self._contour, (float(cx), float(cy)), False) >= 0
 
     def draw_overlay(self, image, stats, tracks, scale=1.0):
-        """在图像上绘制：每个目标按类别的细框、区域内目标停留时间、区域多边形
+        """在图像上绘制：每个目标按类别的细框 + 状态标签、区域多边形
         （拥堵时变红）、左上角 FPS 信息。
+
+        目标标签规则（框色打底 + 白色文字，位于 bbox 上方）:
+            目标在区域内  -> "#ID 置信度 停留时间"   如 "#3 0.87 5.2s"
+            目标不在区域  -> 仅置信度               如 "0.87"
 
         参数:
             image : BGR 帧（原地绘制）
             stats : update() 返回的统计字典（可含 'fps' 处理帧率）
             tracks: 当前帧全部 tracks（bbox 应与 image 同坐标系）
-            scale : 坐标缩放因子（当 image 已缩放、但 _track_dwell/polygon 仍为原坐标时使用）
+            scale : 坐标缩放因子（当 image 已缩放、但 polygon 仍为原坐标时使用）
         原地绘制，返回同一图像。
         """
-        # ---- 1) 每个目标按类别颜色绘制 1px 细框（tracks 已与 image 同坐标）----
+        # ---- 1) 每个目标：细框 + 状态标签（tracks 已与 image 同坐标）----
         for t in tracks:
             tid = t.get('track_id', -1)
             if tid is None or tid < 0:
@@ -193,23 +205,22 @@ class FlowCounter:
             x1, y1, x2, y2 = t['bbox']
             color = class_color(t.get('class_id', 0))
             cv2.rectangle(image, (int(x1), int(y1)), (int(x2), int(y2)), color, 1)
-
-        # ---- 2) 区域内目标在其 bbox 上方标注 "#id 停留秒数"（停留逻辑不动）----
-        # _track_dwell 存的是原图坐标，按 scale 缩放后绘制
-        for tid, info in self._track_dwell.items():
-            x1, y1, x2, y2 = info['bbox']
-            x1, y1 = x1 * scale, y1 * scale
-            label = f"#{tid} {info['dwell']:.1f}s"
+            # 标签：区域内显 "#id 置信度 停留时间"；区域外只显置信度
+            st = self._track_status.get(tid)
+            conf = t.get('confidence', 0.0)
+            if st is not None and st['inside']:
+                label = f"#{tid} {conf:.2f} {st['dwell']:.1f}s"
+            else:
+                label = f"{conf:.2f}"
             (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-            # 黑底便于阅读（位于 bbox 顶部上方）
             cv2.rectangle(image,
                          (int(x1), int(y1) - th - 6),
                          (int(x1) + tw + 4, int(y1) - 2),
-                         (0, 0, 0), -1)
+                         color, -1)
             cv2.putText(image, label, (int(x1) + 2, int(y1) - 4),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
-        # ---- 3) 区域多边形：半透明填充 + 实线边框（按 scale 缩放）----
+        # ---- 2) 区域多边形：半透明填充 + 实线边框（按 scale 缩放）----
         # 拥堵判定：区域内数量 > 阈值 → 红色提示；否则绿色
         congested = stats['current_inside'] > self.congestion_threshold
         if self._contour is not None:

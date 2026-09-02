@@ -52,7 +52,7 @@ class ChartPanel(QWidget):
         self.plot.setClipToView(True)
         self.plot.setFrameStyle(0)   # 不画 Qt 边框（外层 card 已负责）
         # 坐标轴
-        self.plot.setLabel('left', '数量', color='#1f2937', size='12px')
+        self.plot.setLabel('left', '流量/区域内数量', color='#1f2937', size='12px')
         self.plot.setLabel('bottom', '时间 (秒)', color='#1f2937', size='12px')
         self.plot.showGrid(x=True, y=True, alpha=0.25)
 

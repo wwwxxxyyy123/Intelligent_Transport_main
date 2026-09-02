@@ -2,9 +2,9 @@
 
 面板结构（纵向堆叠）：
     [功能菜单] 大标题
-    文件操作 分组（加载图像 / 清空显示）
-    图像分析 分组（开始推理）
-    视频分析 分组（视频跟踪 / 完成区域 / 停止）
+    文件操作 分组（清空显示）
+    图片分析 分组（加载图片 / 图像推理）
+    视频分析 分组（视频追踪 / 完成区域 / 停止）
     —— 分隔线 ——
     [类别图例] 分组
     —— 分隔线 ——
@@ -21,6 +21,27 @@ from PyQt5.QtWidgets import (
 )
 
 from app.config import Config
+
+
+# 统一按钮样式（与 QTableWidget 表头配色一致：#2563eb 蓝底白字）
+_BTN_QSS = """
+QPushButton {
+    background-color: #2563eb;
+    color: #ffffff;
+    border: 1px solid #1d4ed8;
+    border-radius: 6px;
+    font-weight: 600;
+    padding: 7px 14px;
+    min-height: 20px;
+}
+QPushButton:hover { background-color: #1d4ed8; }
+QPushButton:pressed { background-color: #1e40af; }
+QPushButton:disabled {
+    background-color: #f3f4f6;
+    color: #9ca3af;
+    border: 1px solid #e5e7eb;
+}
+"""
 
 
 def _bgr_to_qss(bgr):
@@ -66,22 +87,22 @@ class ButtonPanel(QWidget):
 
         # 分组 1：文件操作
         root.addWidget(self._section_title("文件操作"))
-        self._buttons["load"] = self._add_btn(root, "加载图像", "primary", self.load_clicked)
         self._buttons["clear"] = self._add_btn(root, "清空显示", "primary", self.clear_clicked)
 
         root.addWidget(self._soft_divider())
 
-        # 分组 2：图像分析
-        root.addWidget(self._section_title("图像分析"))
-        self._buttons["infer"] = self._add_btn(root, "开始推理", "accent", self.infer_clicked)
+        # 分组 2：图片分析
+        root.addWidget(self._section_title("图片分析"))
+        self._buttons["load"] = self._add_btn(root, "加载图片", "primary", self.load_clicked)
+        self._buttons["infer"] = self._add_btn(root, "图像推理", "primary", self.infer_clicked)
 
         root.addWidget(self._soft_divider())
 
         # 分组 3：视频分析
         root.addWidget(self._section_title("视频分析"))
-        self._buttons["video"] = self._add_btn(root, "视频跟踪", "accent", self.video_clicked)
+        self._buttons["video"] = self._add_btn(root, "视频追踪", "primary", self.video_clicked)
         self._buttons["finish"] = self._add_btn(root, "完成区域", "primary", self.finish_region_clicked)
-        self._buttons["stop"] = self._add_btn(root, "停止", "danger", self.stop_clicked)
+        self._buttons["stop"] = self._add_btn(root, "停止", "primary", self.stop_clicked)
 
         root.addWidget(self._divider())
 
@@ -102,7 +123,7 @@ class ButtonPanel(QWidget):
 
         th_row = QHBoxLayout()
         th_row.setSpacing(8)
-        th_label = QLabel("区域内数量 >")
+        th_label = QLabel("拥堵阈值")
         th_label.setObjectName("secondaryLabel")
         th_row.addWidget(th_label)
 
@@ -154,10 +175,10 @@ class ButtonPanel(QWidget):
 
     def _add_btn(self, root_layout, text, role, signal):
         btn = QPushButton(text)
-        btn.setProperty("btnRole", role)  # 对应全局 QSS [btnRole="xxx"] 选择器
         btn.setCursor(Qt.PointingHandCursor)
         btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         btn.setMinimumHeight(34)
+        btn.setStyleSheet(_BTN_QSS)
         btn.clicked.connect(signal.emit)
         root_layout.addWidget(btn)
         return btn

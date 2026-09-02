@@ -2,7 +2,8 @@
 
 包含两个标签页：
 - 🤖 AI 分析：Markdown 渲染的整体路况分析（视频结束自动生成 / 手动触发）
-- 📋 目标列表：区域内目标的 ID / 类别 / 停留时间 / 置信度
+- 📋 目标列表：所有进入过区域的目标（ID/类别/当前位置/停留时间/置信度），
+  仅视频模式可用，图像模式下禁用
 """
 import time
 
@@ -14,6 +15,27 @@ from PyQt5.QtWidgets import (
 
 from app.backend.llm_client import LLMClient
 from app.config import Config
+
+
+# 统一按钮样式（与 QTableWidget 表头配色一致：#2563eb 蓝底白字）
+_BTN_QSS = """
+QPushButton {
+    background-color: #2563eb;
+    color: #ffffff;
+    border: 1px solid #1d4ed8;
+    border-radius: 6px;
+    font-weight: 600;
+    padding: 7px 14px;
+    min-height: 20px;
+}
+QPushButton:hover { background-color: #1d4ed8; }
+QPushButton:pressed { background-color: #1e40af; }
+QPushButton:disabled {
+    background-color: #f3f4f6;
+    color: #9ca3af;
+    border: 1px solid #e5e7eb;
+}
+"""
 
 
 # ---- 后台 LLM 调用线程 ----
@@ -67,9 +89,9 @@ class LLMPanel(QWidget):
         self._status_label.setObjectName("secondaryLabel")
         tb.addWidget(self._status_label)
         self._analyze_btn = QPushButton("🤖 AI 分析")
-        self._analyze_btn.setProperty("btnRole", "warn")
         self._analyze_btn.setCursor(Qt.PointingHandCursor)
         self._analyze_btn.setMinimumHeight(34)
+        self._analyze_btn.setStyleSheet(_BTN_QSS)
         self._analyze_btn.clicked.connect(self._on_analyze_clicked)
         tb.addWidget(self._analyze_btn)
         root.addLayout(tb)
@@ -114,32 +136,41 @@ class LLMPanel(QWidget):
         ai_l.addWidget(self._ai_output)
         self._tabs.addTab(self._ai_tab, "🤖 AI 分析")
 
-        # Tab 2: 目标列表
+        # Tab 2: 目标列表（视频模式启用；图像模式禁用）
         self._targets_tab = QWidget()
         tg_l = QVBoxLayout(self._targets_tab)
         tg_l.setContentsMargins(8, 6, 8, 6)
         tg_l.setSpacing(0)
-        self._targets_table = QTableWidget(0, 4)
+        self._targets_table = QTableWidget(0, 5)
         self._targets_table.setHorizontalHeaderLabels(
-            ["目标 ID", "类别名称", "区域内停留时间", "置信度"])
+            ["目标 ID", "类别名称", "当前位置", "区域内停留时间", "置信度"])
         self._targets_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self._targets_table.verticalHeader().setVisible(False)
         self._targets_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self._targets_table.verticalHeader().setDefaultSectionSize(28)
         tg_l.addWidget(self._targets_table)
-        self._tabs.addTab(self._targets_tab, "📋 目标列表")
+        self._tab_targets_idx = self._tabs.addTab(self._targets_tab, "📋 目标列表")
 
         root.addWidget(self._tabs, stretch=1)
 
     # ---------- 数据更新 ----------
-    def _cn_name(self, det):
-        cid = det.get('class_id', 0)
-        return self._class_names_cn.get(cid, det.get('class_name', '未知'))
+    def _cn_name_by_id(self, class_id):
+        return self._class_names_cn.get(class_id, str(class_id))
 
     def update_detections(self, detections):
+        """缓存检测结果/跟踪目标（供 LLM 分析使用）。
+
+        图像模式下目标列表被禁用，不填充表格；视频模式列表由
+        update_stats(track_status) 驱动。
+        """
         self._current_detections = detections
-        if not self._stats_history:
-            self._rebuild(detections, dwell_map=None)
+
+    def set_targets_enabled(self, enabled):
+        """启用/禁用目标列表 Tab（视频模式启用，图像模式禁用）。"""
+        self._tabs.setTabEnabled(self._tab_targets_idx, enabled)
+        self._tabs.setTabText(
+            self._tab_targets_idx,
+            "📋 目标列表" if enabled else "📋 目标列表（图像模式不可用）")
 
     def update_stats(self, stats):
         if not stats:
@@ -149,57 +180,49 @@ class LLMPanel(QWidget):
         if len(self._stats_history) > max_frames:
             self._stats_history = self._stats_history[-max_frames:]
 
-        dwell = stats.get('track_dwells')
-        if dwell is not None:
-            self._rebuild(self._current_detections, dwell)
+        status = stats.get('track_status')
+        if status is not None:
+            self._rebuild_targets(status)
 
-    def _rebuild(self, detections, dwell_map):
+    def _rebuild_targets(self, status_map):
+        """根据 track_status 重建目标列表。
+
+        status_map: {tid: {'inside': bool, 'class_id', 'confidence', 'dwell'}}
+        显示所有进入过区域的目标：
+            - 当前位置：区域内 / 离开区域（离开后保留行，停留时间冻结）
+        """
         self._targets_table.clearContents()
         self._targets_table.setRowCount(0)
         self._targets_table.clearSpans()
 
-        if dwell_map is not None:
-            inside = []
-            for det in detections:
-                tid = det.get('track_id', -1)
-                if tid is not None and tid >= 0 and tid in dwell_map:
-                    info = dwell_map[tid]
-                    inside.append({
-                        'id': tid, 'name': self._cn_name(det),
-                        'dwell': info.get('dwell', 0.0),
-                        'conf': det.get('confidence', 0),
-                    })
-            if not inside:
-                self._empty_hint("区域内暂无目标")
-                return
-            rows = inside
-        else:
-            if not detections:
-                self._empty_hint("暂无检测结果")
-                return
-            rows = []
-            for i, d in enumerate(detections, start=1):
-                tid = d.get('track_id', -1)
-                rows.append({
-                    'id': str(tid) if tid is not None and tid >= 0 else i,
-                    'name': self._cn_name(d),
-                    'dwell': None,
-                    'conf': d.get('confidence', 0),
-                })
+        if not status_map:
+            self._empty_hint("暂无目标进入区域")
+            return
 
-        for r in rows:
+        for tid in sorted(status_map):
+            info = status_map[tid]
             row = self._targets_table.rowCount()
             self._targets_table.insertRow(row)
-            dwell_s = f"{r['dwell']:.1f} 秒" if r['dwell'] is not None else "--"
-            vals = [str(r['id']), r['name'], dwell_s, f"{r['conf']:.3f}"]
+            dwell_s = f"{info.get('dwell', 0.0):.1f} 秒"
+            pos = "区域内" if info.get('inside') else "离开区域"
+            vals = [
+                str(tid),
+                self._cn_name_by_id(info.get('class_id', 0)),
+                pos,
+                dwell_s,
+                f"{info.get('confidence', 0.0):.3f}",
+            ]
             for c, v in enumerate(vals):
                 it = QTableWidgetItem(v)
                 it.setTextAlignment(Qt.AlignCenter)
+                # 离开区域的目标整行置灰区分
+                if not info.get('inside'):
+                    it.setForeground(Qt.gray)
                 self._targets_table.setItem(row, c, it)
 
     def _empty_hint(self, text):
         self._targets_table.setRowCount(1)
-        self._targets_table.setSpan(0, 0, 1, 4)
+        self._targets_table.setSpan(0, 0, 1, 5)
         it = QTableWidgetItem(text)
         it.setTextAlignment(Qt.AlignCenter)
         it.setForeground(Qt.gray)

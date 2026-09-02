@@ -1,15 +1,12 @@
-"""主窗口（现代卡片区布局）：顶栏菜单 / 左(功能) / 中(视频+AI) / 右(图表+统计)。
-
-新增顶层 QMenuBar：文件(F) / 视图(V) / 分析(A) / 帮助(H) 四菜单，等价于左侧按钮的快捷操作。
+"""主窗口（现代卡片区布局）：左(功能) / 中(视频+AI) / 右(图表+统计)。
 
 三栏 Splitter 比例：左 240 | 中 900 | 右 560（总 1700，适配 1080p）。
 主窗口不再写任何局部 QSS，所有颜色/圆角/字体由 main.py 全局 QSS + objectName 接管。
 """
 import cv2
 from PyQt5.QtCore import Qt, pyqtSlot
-from PyQt5.QtGui import QKeySequence
 from PyQt5.QtWidgets import (
-    QAction, QActionGroup, QFileDialog, QMainWindow, QMessageBox,
+    QFileDialog, QMainWindow, QMessageBox,
     QSizePolicy, QSplitter, QVBoxLayout, QWidget,
 )
 
@@ -43,86 +40,12 @@ class MainWindow(QMainWindow):
         self._mode = "idle"
         self._pending_video_path = None
 
-        self._setup_menubar()
         self._setup_ui()
         self._connect_signals()
         self._set_mode("idle")
 
         if self.detector is not None:
             self._sync_legend(self.detector.names)
-
-    # ========== 菜单 ==========
-    def _setup_menubar(self):
-        mb = self.menuBar()
-
-        # ---- 文件菜单 ----
-        fm = mb.addMenu("文件(&F)")
-        a_load = QAction("加载图像…", self)
-        a_load.setShortcut(QKeySequence("Ctrl+O"))
-        a_load.triggered.connect(self.on_load_image)
-        fm.addAction(a_load)
-
-        a_video = QAction("视频跟踪…", self)
-        a_video.setShortcut(QKeySequence("Ctrl+Shift+V"))
-        a_video.triggered.connect(self.on_video_track)
-        fm.addAction(a_video)
-
-        fm.addSeparator()
-
-        a_clear = QAction("清空显示", self)
-        a_clear.setShortcut(QKeySequence("Ctrl+D"))
-        a_clear.triggered.connect(self.on_clear)
-        fm.addAction(a_clear)
-
-        fm.addSeparator()
-
-        a_exit = QAction("退出", self)
-        a_exit.setShortcut(QKeySequence.Quit)
-        a_exit.triggered.connect(self.close)
-        fm.addAction(a_exit)
-
-        # ---- 视图菜单 ----
-        vm = mb.addMenu("视图(&V)")
-        self.act_finish = QAction("完成区域绘制", self)
-        self.act_finish.setShortcut(QKeySequence("Enter"))
-        self.act_finish.triggered.connect(self.on_finish_region)
-        vm.addAction(self.act_finish)
-
-        self.act_stop = QAction("停止 / 取消", self)
-        self.act_stop.setShortcut(QKeySequence("Esc"))
-        self.act_stop.triggered.connect(self.on_video_stop)
-        vm.addAction(self.act_stop)
-
-        # ---- 分析菜单 ----
-        am = mb.addMenu("分析(&A)")
-        a_infer = QAction("开始推理", self)
-        a_infer.setShortcut(QKeySequence("Ctrl+R"))
-        a_infer.triggered.connect(self.on_infer)
-        am.addAction(a_infer)
-
-        am.addSeparator()
-
-        a_ai = QAction("🤖 AI 路况分析（手动）", self)
-        a_ai.setShortcut(QKeySequence("Ctrl+G"))
-        a_ai.triggered.connect(self._manual_ai)
-        am.addAction(a_ai)
-
-        # ---- 帮助菜单 ----
-        hm = mb.addMenu("帮助(&H)")
-        a_about = QAction("关于系统", self)
-        a_about.triggered.connect(self._about)
-        hm.addAction(a_about)
-
-        a_help = QAction("操作说明", self)
-        a_help.setShortcut(QKeySequence("F1"))
-        a_help.triggered.connect(self._help)
-        hm.addAction(a_help)
-
-        # 菜单状态同步
-        self._menu_actions = {
-            'load': a_load, 'infer': a_infer, 'clear': a_clear,
-            'video': a_video, 'finish': self.act_finish, 'stop': self.act_stop,
-        }
 
     # ========== UI 组装 ==========
     def _setup_ui(self):
@@ -183,17 +106,10 @@ class MainWindow(QMainWindow):
         self.button_panel.congestion_threshold_changed.connect(
             self.on_congestion_threshold_changed)
 
-    # ========== 模式切换（左侧按钮 + 顶层菜单联动） ==========
+    # ========== 模式切换 ==========
     def _set_mode(self, mode):
         self._mode = mode
         self.button_panel.set_state(mode)
-        is_idle = (mode == "idle")
-        is_drawing = (mode == "drawing")
-        is_tracking = (mode == "tracking")
-        for k in ('load', 'infer', 'clear', 'video'):
-            self._menu_actions[k].setEnabled(is_idle)
-        self._menu_actions['finish'].setEnabled(is_drawing)
-        self._menu_actions['stop'].setEnabled(is_drawing or is_tracking)
 
     # ========== 单图推理 ==========
     def on_load_image(self):
@@ -208,6 +124,8 @@ class MainWindow(QMainWindow):
             return
         self.image_viewer.show_image(self.current_image)
         self.llm_panel.update_detections([])
+        # 图像模式禁用目标列表（目标列表仅视频跟踪时使用）
+        self.llm_panel.set_targets_enabled(False)
         self.statusBar().showMessage(f"已加载图像: {path}")
 
     def on_infer(self):
@@ -241,6 +159,7 @@ class MainWindow(QMainWindow):
         self.current_image_path = None
         self.image_viewer.clear()
         self.llm_panel.reset()
+        self.llm_panel.set_targets_enabled(True)
         self.chart_panel.reset()
         self.stats_panel.reset()
         self.statusBar().showMessage("已清空")
@@ -261,6 +180,8 @@ class MainWindow(QMainWindow):
         self._set_mode("drawing")
         self.image_viewer.enter_drawing_mode(frame)
         self.llm_panel.update_detections([])
+        # 视频模式启用目标列表
+        self.llm_panel.set_targets_enabled(True)
         self.statusBar().showMessage(
             "左键添加区域顶点(≥3)，右键清空；点击[完成区域]开始跟踪；不选区域则整帧统计")
 
@@ -339,10 +260,6 @@ class MainWindow(QMainWindow):
         self._set_mode("idle")
         self.statusBar().clearMessage()
         QMessageBox.critical(self, "视频跟踪失败", msg)
-
-    # ========== 菜单辅助 ==========
-    def _manual_ai(self):
-        self.llm_panel._trigger() if hasattr(self.llm_panel, '_trigger') else None
 
     def _about(self):
         QMessageBox.about(
