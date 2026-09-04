@@ -7,7 +7,7 @@ warnings.filterwarnings('ignore')
 
 # --- 1. 基础配置 ---
 DATA_YAML = 'data.yaml'
-MODEL_NAME = 'yolo12n.pt'
+MODEL_NAME = './ultralytics/cfg/models/11/ghost-p2-lh-yolo11n.yaml'
 EPOCHS = 150
 IMAGE_SIZE = 640
 BATCH_SIZE = 32
@@ -17,7 +17,7 @@ DEVICE = 0 if torch.cuda.is_available() else 'cpu'
 # --- 3. 训练模型 ---
 def main():
     # 加载预训练模型
-    model = YOLO(MODEL_NAME)
+    model = YOLO(MODEL_NAME).load('yolo11n.pt')
     
     # 开始训练
     results = model.train(
@@ -63,7 +63,7 @@ def main():
 
         # === 其他 ===
         project='runs/train',    # 结果保存项目名
-        name='yolo12n',           # 本次实验名称
+        name='ghost-p2-lh-yolo11n',           # 本次实验名称
         exist_ok=True,           # 允许覆盖同名实验
         pretrained=True,         # 使用预训练权重
         resume=False,            # 从检查点恢复训练

@@ -5,7 +5,6 @@ pyqtgraph 的亮主题设置（setBackground / pen / label）保留在组件内�
 from collections import deque
 
 import pyqtgraph as pg
-from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QBrush, QColor, QPen
 from PyQt5.QtWidgets import QLabel, QSizePolicy, QVBoxLayout, QWidget
 
