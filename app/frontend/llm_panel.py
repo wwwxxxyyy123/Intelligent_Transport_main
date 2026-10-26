@@ -1,11 +1,15 @@
 """LLM 输出面板：AI 路况分析（Markdown）与目标列表两个标签页。
 
 目标列表展示所有进入过区域的目标（ID/类别/当前位置/停留时间/置信度），
-仅视频模式可用，图像模式下禁用。
+仅视频模式可用，图像模式下禁用。浅色主题：Markdown 文档样式见 _MARKDOWN_CSS。
 """
 import time
 
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, pyqtSlot
+from PyQt5.QtGui import (
+    QColor, QFont, QTextCharFormat, QTextCursor, QTextFrameFormat,
+    QTextTable, QTextTableCellFormat,
+)
 from PyQt5.QtWidgets import (
     QHeaderView, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QTableWidget,
     QTableWidgetItem, QTabWidget, QTextBrowser, QVBoxLayout, QWidget,
@@ -13,7 +17,9 @@ from PyQt5.QtWidgets import (
 
 from app.backend.llm_client import LLMClient
 from app.config import Config
-from app.frontend.theme import BTN_QSS
+from app.frontend.theme import FONT_MONO, btn_qss
+
+COLOR_OFF_AREA = QColor(110, 128, 152)   # 离开区域的目标文字（弱化）
 
 
 class LLMWorker(QThread):
@@ -50,59 +56,73 @@ class LLMPanel(QWidget):
 
     def _build_ui(self):
         root = QVBoxLayout(self)
-        root.setContentsMargins(14, 10, 14, 10)
-        root.setSpacing(8)
+        root.setContentsMargins(14, 12, 14, 12)
+        root.setSpacing(9)
 
-        # 工具栏：标题 + 状态 + 分析按钮
+        # 工具栏：标题 + 模型标签 + 状态 + 分析按钮
         toolbar = QHBoxLayout()
-        toolbar.setSpacing(10)
+        toolbar.setSpacing(8)
         title = QLabel("AI 路况分析")
         title.setObjectName("panelHead")
         toolbar.addWidget(title)
+
+        model_name = str(self.config.get('llm', 'model', default='LLM'))
+        model_chip = QLabel(model_name)
+        model_chip.setObjectName("chipLabel")
+        model_chip.setToolTip("config.yaml → llm.model")
+        toolbar.addWidget(model_chip)
         toolbar.addStretch()
+
         self._status_label = QLabel("就绪")
-        self._status_label.setObjectName("secondaryLabel")
+        self._status_label.setObjectName("mutedLabel")
         toolbar.addWidget(self._status_label)
-        self._analyze_btn = QPushButton("🤖 AI 分析")
+        self._analyze_btn = QPushButton("AI 分析")
         self._analyze_btn.setCursor(Qt.PointingHandCursor)
-        self._analyze_btn.setMinimumHeight(34)
-        self._analyze_btn.setStyleSheet(BTN_QSS)
+        self._analyze_btn.setMinimumHeight(32)
+        self._analyze_btn.setStyleSheet(btn_qss("primary"))
         self._analyze_btn.clicked.connect(self._trigger)
         toolbar.addWidget(self._analyze_btn)
         root.addLayout(toolbar)
 
         self._tabs = QTabWidget()
+        self._tabs.setDocumentMode(True)
+        try:
+            self._tabs.tabBar().setDrawBase(False)   # 去掉文档模式下的基线
+        except AttributeError:
+            pass
 
         # Tab 1: AI 分析（Markdown 渲染）
         ai_tab = QWidget()
         ai_layout = QVBoxLayout(ai_tab)
-        ai_layout.setContentsMargins(8, 6, 8, 6)
+        ai_layout.setContentsMargins(4, 4, 4, 4)
         ai_layout.setSpacing(0)
         self._ai_output = QTextBrowser()
         self._ai_output.setOpenExternalLinks(True)
         self._ai_output.setPlaceholderText(
-            '视频跟踪结束后将自动生成整体路况分析报告...\n\n'
-            '也可点击上方 "🤖 AI 分析" 按钮手动触发。\n\n'
-            '分析结果将以 Markdown 格式渲染，包含：\n'
-            '• 当前交通状况评估    • 异常情况识别    • 改善建议')
+            "视频跟踪结束后将自动生成整体路况分析报告\n\n"
+            "也可点击上方「AI 分析」按钮手动触发\n\n"
+            "报告内容：交通状况评估 / 异常情况识别 / 原因分析 / 改善建议")
         self._ai_output.document().setDefaultStyleSheet(_MARKDOWN_CSS)
         ai_layout.addWidget(self._ai_output)
-        self._tabs.addTab(ai_tab, "🤖 AI 分析")
+        self._tabs.addTab(ai_tab, "AI 分析")
 
         # Tab 2: 目标列表
         targets_tab = QWidget()
         targets_layout = QVBoxLayout(targets_tab)
-        targets_layout.setContentsMargins(8, 6, 8, 6)
+        targets_layout.setContentsMargins(4, 4, 4, 4)
         targets_layout.setSpacing(0)
         self._targets_table = QTableWidget(0, 5)
         self._targets_table.setHorizontalHeaderLabels(
-            ["目标 ID", "类别名称", "当前位置", "区域内停留时间", "置信度"])
+            ["目标 ID", "类别名称", "当前位置", "区域内停留", "置信度"])
         self._targets_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self._targets_table.horizontalHeader().setHighlightSections(False)
         self._targets_table.verticalHeader().setVisible(False)
         self._targets_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self._targets_table.verticalHeader().setDefaultSectionSize(28)
+        self._targets_table.setShowGrid(False)
+        self._targets_table.setAlternatingRowColors(True)
+        self._targets_table.verticalHeader().setDefaultSectionSize(30)
         targets_layout.addWidget(self._targets_table)
-        self._tab_targets_idx = self._tabs.addTab(targets_tab, "📋 目标列表")
+        self._tab_targets_idx = self._tabs.addTab(targets_tab, "目标列表")
 
         root.addWidget(self._tabs, stretch=1)
 
@@ -115,7 +135,7 @@ class LLMPanel(QWidget):
         self._tabs.setTabEnabled(self._tab_targets_idx, enabled)
         self._tabs.setTabText(
             self._tab_targets_idx,
-            "📋 目标列表" if enabled else "📋 目标列表（图像模式不可用）")
+            "目标列表" if enabled else "目标列表（图像模式不可用）")
 
     def update_stats(self, stats):
         """缓存统计快照（供 LLM 分析），并按目标状态刷新列表。"""
@@ -140,22 +160,27 @@ class LLMPanel(QWidget):
             self._empty_hint("暂无目标进入区域")
             return
 
+        mono_font = QFont(FONT_MONO)
+        mono_font.setPointSize(10)
         for tid in sorted(status_map):
             info = status_map[tid]
             row = self._targets_table.rowCount()
             self._targets_table.insertRow(row)
+            inside = bool(info.get('inside'))
             values = [
                 str(tid),
                 self._cn_name(info.get('class_id', 0)),
-                "区域内" if info.get('inside') else "离开区域",
-                f"{info.get('dwell', 0.0):.1f} 秒",
+                "区域内" if inside else "离开区域",
+                f"{info.get('dwell', 0.0):.1f} s",
                 f"{info.get('confidence', 0.0):.3f}",
             ]
             for col, value in enumerate(values):
                 item = QTableWidgetItem(value)
                 item.setTextAlignment(Qt.AlignCenter)
-                if not info.get('inside'):
-                    item.setForeground(Qt.gray)
+                if col in (0, 4):
+                    item.setFont(mono_font)
+                if not inside:
+                    item.setForeground(COLOR_OFF_AREA)
                 self._targets_table.setItem(row, col, item)
 
     def _empty_hint(self, text):
@@ -163,7 +188,7 @@ class LLMPanel(QWidget):
         self._targets_table.setSpan(0, 0, 1, 5)
         hint = QTableWidgetItem(text)
         hint.setTextAlignment(Qt.AlignCenter)
-        hint.setForeground(Qt.gray)
+        hint.setForeground(COLOR_OFF_AREA)
         self._targets_table.setItem(0, 0, hint)
 
     def reset(self):
@@ -197,38 +222,86 @@ class LLMPanel(QWidget):
     def _on_done(self, success, text, err):
         self._analyze_btn.setEnabled(True)
         if success:
-            block = f"## 🕐 AI 路况分析 — {time.strftime('%H:%M:%S')}\n\n{text}\n\n---\n\n"
+            block = f"## AI 路况分析 — {time.strftime('%H:%M:%S')}\n\n{text}\n\n---\n\n"
             self._status_label.setText("分析完成")
         else:
-            block = (f"## ❌ 分析失败 — {time.strftime('%H:%M:%S')}\n\n"
+            block = (f"## 分析失败 — {time.strftime('%H:%M:%S')}\n\n"
                      f"**错误信息：** {err}\n\n"
                      f"请检查项目根目录 `.env` 中的 `OPENAI_API_KEY` 与 `OPENAI_BASE_URL`，"
                      f"或确认模型名称是否有效。\n\n---\n\n")
             self._status_label.setText("分析失败")
         self._md_content += block
         self._ai_output.setMarkdown(self._md_content)
+        self._style_markdown_tables()
         scrollbar = self._ai_output.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
 
+    def _style_markdown_tables(self):
+        """把 Markdown 表格重绘为浅色表格。
 
-# Markdown 文档内 CSS（只作用于 QTextBrowser 文档，不涉及外层组件）
+        QTextDocument 对表格 CSS 支持有限（border/color/背景常被忽略），
+        这里直接用 QTextTableCellFormat 重设单元格底色、描边与文字颜色。
+        """
+        doc = self._ai_output.document()
+        tables = []
+        stack = [doc.rootFrame()]
+        while stack:
+            frame = stack.pop()
+            for child in frame.childFrames():
+                stack.append(child)
+                if isinstance(child, QTextTable):
+                    tables.append(child)
+
+        for table in tables:
+            for row in range(table.rows()):
+                for col in range(table.columns()):
+                    cell = table.cellAt(row, col)
+                    cell_fmt = QTextTableCellFormat()
+                    cell_fmt.setBackground(
+                        QColor("#f2f6fc" if row == 0 else "#ffffff"))
+                    cell_fmt.setBorder(1)
+                    cell_fmt.setBorderBrush(QColor("#e3e9f3"))
+                    cell_fmt.setBorderStyle(QTextFrameFormat.BorderStyle_Solid)
+                    cell_fmt.setLeftPadding(8)
+                    cell_fmt.setRightPadding(8)
+                    cell_fmt.setTopPadding(4)
+                    cell_fmt.setBottomPadding(4)
+                    cell.setFormat(cell_fmt)
+
+                    cursor = QTextCursor(doc)
+                    cursor.setPosition(cell.firstCursorPosition().position())
+                    cursor.setPosition(cell.lastCursorPosition().position(),
+                                        QTextCursor.KeepAnchor)
+                    char_fmt = QTextCharFormat()
+                    char_fmt.setForeground(
+                        QColor("#55617c" if row == 0 else "#33415c"))
+                    if row == 0:
+                        char_fmt.setFontWeight(QFont.Bold)
+                    cursor.mergeCharFormat(char_fmt)
+
+
+# Markdown 文档内 CSS（只作用于 QTextBrowser 的文档，不涉及外层组件）
 _MARKDOWN_CSS = """
-    h1 { color:#1f2937; font-size:18px; border-bottom:2px solid #2563eb;
-         padding-bottom:4px; margin-top:10px; }
-    h2 { color:#1e40af; font-size:15px; margin-top:8px; }
-    h3 { color:#374151; font-size:14px; margin-top:6px; }
-    p  { line-height:1.7; margin:4px 0; }
-    ul, ol { margin:4px 0; padding-left:20px; }
-    li { margin:2px 0; line-height:1.6; }
-    strong { color:#dc2626; }
-    em { color:#7c3aed; }
-    blockquote { border-left:3px solid #2563eb; margin:6px 0;
-                 padding:4px 10px; background:#f1f5f9; color:#475569; }
-    code { background:#f3f4f6; padding:2px 4px; border-radius:3px;
-           font-family:Consolas,monospace; }
-    hr { border:none; border-top:1px solid #e5e7eb; margin:10px 0; }
-    table { border-collapse:collapse; margin:6px 0; }
-    th, td { border:1px solid #e5e7eb; padding:4px 8px; }
-    th { background:#2563eb; color:#ffffff; }
-    tr:nth-child(even) td { background:#f9fafb; }
+    body { color:#33415c; }
+    h1 { color:#17233a; font-size:17px; border-bottom:1px solid #e3e9f3;
+         padding-bottom:5px; margin-top:10px; }
+    h2 { color:#14539f; font-size:15px; margin-top:12px; margin-bottom:4px; }
+    h3 { color:#55617c; font-size:13px; margin-top:8px; }
+    p  { line-height:1.75; margin:5px 0; color:#33415c; }
+    ul, ol { margin:5px 0; padding-left:22px; }
+    li { margin:3px 0; line-height:1.7; color:#33415c; }
+    strong { color:#0b5ab0; font-weight:700; }
+    em { color:#6d4fd0; }
+    a { color:#1d6fd4; }
+    blockquote { border-left:3px solid #1d6fd4; margin:7px 0;
+                 padding:6px 12px; background:#f4f8ff; color:#55617c; }
+    code { background:#f1f5fb; color:#0b5ab0; padding:2px 5px;
+           border-radius:4px; font-family:Consolas,monospace; }
+    pre { background:#f6f8fc; border:1px solid #e3e9f3; border-radius:6px;
+          padding:8px; color:#33415c; font-family:Consolas,monospace; }
+    hr { border:none; border-top:1px solid #e9eff8; margin:12px 0; }
+    table { border-collapse:collapse; margin:8px 0; }
+    th, td { border:1px solid #e3e9f3; padding:5px 9px; color:#33415c; }
+    th { background:#f2f6fc; color:#55617c; font-weight:600; }
+    tr:nth-child(even) td { background:#fafcff; }
 """

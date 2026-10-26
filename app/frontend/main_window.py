@@ -1,8 +1,11 @@
-"""主窗口：三栏卡片布局（左功能 / 中视频+AI / 右图表+统计）。"""
+"""主窗口：顶栏 + 三栏卡片布局（左功能 / 中视频+AI / 右图表+统计）。"""
+import os
+
 import cv2
 from PyQt5.QtCore import Qt, pyqtSlot
 from PyQt5.QtWidgets import (
-    QFileDialog, QMainWindow, QMessageBox, QSplitter, QVBoxLayout, QWidget,
+    QFileDialog, QFrame, QHBoxLayout, QLabel, QMainWindow, QMessageBox,
+    QSizePolicy, QSplitter, QVBoxLayout, QWidget,
 )
 
 from app.backend.detector import Detector
@@ -13,6 +16,7 @@ from app.frontend.chart_panel import ChartPanel
 from app.frontend.image_viewer import ImageViewer
 from app.frontend.llm_panel import LLMPanel
 from app.frontend.stats_panel import StatsPanel
+from app.frontend.theme import make_app_icon
 from app.frontend.video_worker import VideoWorker
 
 
@@ -25,8 +29,9 @@ class MainWindow(QMainWindow):
         app_name = self.config.get('system', 'app_name', default='智能交通检测系统')
         win_size = self.config.get('system', 'window_size', default=[1700, 960])
         self.setWindowTitle(app_name)
+        self.setWindowIcon(make_app_icon())
         self.resize(*win_size)
-        self.setMinimumSize(1280, 780)
+        self.setMinimumSize(1280, 800)
 
         self.detector = detector
         self.current_image_path = None
@@ -48,8 +53,10 @@ class MainWindow(QMainWindow):
         central.setStyleSheet("background-color: transparent;")
         self.setCentralWidget(central)
         outer = QVBoxLayout(central)
-        outer.setContentsMargins(10, 10, 10, 10)
-        outer.setSpacing(8)
+        outer.setContentsMargins(12, 12, 12, 8)
+        outer.setSpacing(10)
+
+        outer.addWidget(self._build_header())
 
         self.button_panel = ButtonPanel()
         self.image_viewer = ImageViewer()
@@ -67,10 +74,61 @@ class MainWindow(QMainWindow):
         main_splitter.setStretchFactor(0, 0)   # 左栏固定宽度
         main_splitter.setStretchFactor(1, 1)
         main_splitter.setStretchFactor(2, 1)
-        main_splitter.setSizes([240, 900, 560])
+        main_splitter.setSizes([250, 890, 560])
         main_splitter.setChildrenCollapsible(False)
-        main_splitter.setHandleWidth(4)
+        main_splitter.setHandleWidth(8)
         outer.addWidget(main_splitter)
+
+        self.statusBar().setSizeGripEnabled(False)
+        self.statusBar().showMessage("就绪")
+
+    def _build_header(self):
+        """顶部标题栏：品牌标识 + 应用名 + 运行信息徽标。"""
+        header = QFrame()
+        header.setObjectName("header")
+        header.setFixedHeight(64)
+        header.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+        lay = QHBoxLayout(header)
+        lay.setContentsMargins(18, 8, 18, 8)
+        lay.setSpacing(14)
+
+        logo = QLabel()
+        logo.setPixmap(make_app_icon().pixmap(36, 36))
+        logo.setFixedSize(36, 36)
+        lay.addWidget(logo)
+
+        titles = QVBoxLayout()
+        titles.setContentsMargins(0, 0, 0, 0)
+        titles.setSpacing(1)
+        title = QLabel(self.windowTitle())
+        title.setObjectName("appTitle")
+        subtitle = QLabel("AI Traffic Detection & Analytics  ·  YOLO11n + ByteTrack")
+        subtitle.setObjectName("appSubtitle")
+        titles.addWidget(title)
+        titles.addWidget(subtitle)
+        lay.addLayout(titles)
+
+        lay.addStretch(1)
+
+        # 运行信息徽标（静态信息，随配置生成）
+        weights = str(self.config.get('model', 'weights', default='best.onnx'))
+        device = str(self.config.get('model', 'device', default='auto'))
+        self._model_badge = QLabel(f"模型 {os.path.basename(weights)}")
+        self._model_badge.setObjectName("badge")
+        self._model_badge.setToolTip(f"权重路径：{weights}")
+
+        self._device_badge = QLabel(f"设备 {device}")
+        self._device_badge.setObjectName("badge")
+        self._device_badge.setToolTip("设备由 config.yaml 的 model.device 决定（auto 时优先 CUDA）")
+
+        self._state_badge = QLabel("● 就绪")
+        self._state_badge.setObjectName("badgeOk")
+        self._state_badge.setToolTip("当前工作状态")
+
+        for w in (self._model_badge, self._device_badge, self._state_badge):
+            lay.addWidget(w)
+        return header
 
     @staticmethod
     def _v_splitter(top, bottom, sizes, stretch_top, stretch_bottom):
@@ -81,7 +139,7 @@ class MainWindow(QMainWindow):
         splitter.setStretchFactor(0, stretch_top)
         splitter.setStretchFactor(1, stretch_bottom)
         splitter.setSizes(sizes)
-        splitter.setHandleWidth(4)
+        splitter.setHandleWidth(8)
         return splitter
 
     def _connect_signals(self):
@@ -97,6 +155,20 @@ class MainWindow(QMainWindow):
     def _set_mode(self, mode):
         self._mode = mode
         self.button_panel.set_state(mode)
+        self._update_state_badge(mode)
+
+    def _update_state_badge(self, mode):
+        """按工作模式更新顶栏状态徽标（纯视觉，不参与业务判断）。"""
+        text, kind = {
+            "idle": ("● 就绪", "badgeOk"),
+            "drawing": ("● 绘制区域", "badgeBusy"),
+            "tracking": ("● 追踪中", "badgeBusy"),
+        }.get(mode, ("● 就绪", "badgeOk"))
+        self._state_badge.setText(text)
+        if self._state_badge.objectName() != kind:
+            self._state_badge.setObjectName(kind)
+            self._state_badge.style().unpolish(self._state_badge)
+            self._state_badge.style().polish(self._state_badge)
 
     # ---------- 图像模式 ----------
     def on_load_image(self):
