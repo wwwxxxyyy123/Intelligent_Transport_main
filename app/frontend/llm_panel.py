@@ -202,7 +202,8 @@ class LLMPanel(QWidget):
         else:
             block = (f"## ❌ 分析失败 — {time.strftime('%H:%M:%S')}\n\n"
                      f"**错误信息：** {err}\n\n"
-                     f"请检查项目根目录 `.env` 中的 `AGNES_API_KEY` 与 `AGNES_BASE_URL`。\n\n---\n\n")
+                     f"请检查项目根目录 `.env` 中的 `OPENAI_API_KEY` 与 `OPENAI_BASE_URL`，"
+                     f"或确认模型名称是否有效。\n\n---\n\n")
             self._status_label.setText("分析失败")
         self._md_content += block
         self._ai_output.setMarkdown(self._md_content)

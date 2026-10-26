@@ -1,8 +1,12 @@
-"""大语言模型客户端：读取 .env 密钥，经 OpenAI SDK 调用 Agnes AI 生成路况分析。
+"""大语言模型客户端：读取 .env 密钥，经 OpenAI SDK 调用任何 OpenAI 兼容端点。
 
 用法:
-    client = LLMClient()   # 自动从项目根目录 .env 加载密钥
+    client = LLMClient()   # 自动从项目根目录 .env 加载密钥与模型
     ok, text, err = client.analyze(traffic_stats)
+
+.env 支持两套命名（优先使用标准 OpenAI 兼容命名）:
+    OPENAI_API_KEY / OPENAI_BASE_URL / DEFAULT_MODEL
+    AGNES_API_KEY  / AGNES_BASE_URL   （兼容旧配置）
 
 分析输入包含目标列表 JSON（同步保存到项目根目录 traffic_targets.json）
 与流量统计摘要。无 Qt 依赖，可在后台线程中安全调用。
@@ -22,7 +26,7 @@ def _load_env():
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         env_path = os.path.join(project_root, '.env')
         if os.path.exists(env_path):
-            load_dotenv(dotenv_path=env_path, override=False)
+            load_dotenv(dotenv_path=env_path, override=True)
             return True
     except ImportError:
         pass
@@ -71,16 +75,28 @@ USER_PROMPT_TEMPLATE = """## 一、目标列表（JSON）
 
 
 class LLMClient:
-    """大语言模型客户端（Agnes AI 接口，通过 OpenAI SDK 调用）。"""
+    """大语言模型客户端，通过 OpenAI SDK 调用任何 OpenAI 兼容端点。
+
+    配置优先级：.env 文件（load_dotenv override=True） → 系统环境变量 → config.yaml。
+    """
 
     def __init__(self):
         self.config = Config()
-        self.api_key = os.environ.get('AGNES_API_KEY', '')
-        self.base_url = os.environ.get('AGNES_BASE_URL', '')
-        self.model = self.config.get('llm', 'model', default='agnes-2.0-flash')
-        self.timeout = 30  # 请求超时秒数
+        # 优先读取标准 OpenAI 兼容命名（OPENAI_*），兼容旧的 AGNES_*
+        self.api_key = os.environ.get('OPENAI_API_KEY') \
+            or os.environ.get('AGNES_API_KEY', '')
+        self.base_url = os.environ.get('OPENAI_BASE_URL') \
+            or os.environ.get('AGNES_BASE_URL', '')
+        # 模型名：.env DEFAULT_MODEL → config.yaml llm.model
+        self.model = os.environ.get('DEFAULT_MODEL') \
+            or self.config.get('llm', 'model', default='')
+        # 清理末尾引号与空格，防止 .env 里残留的引号污染 URL/Key
+        self.api_key = (self.api_key or '').strip().strip('"').strip("'")
+        self.base_url = (self.base_url or '').strip().strip('"').strip("'")
+        self.model = (self.model or '').strip().strip('"').strip("'")
+
+        self.timeout = self.config.get('llm', 'timeout', default=120)
         self._class_names_cn = self.config.get('classes', default={}) or {}
-        # 延迟创建客户端，避免密钥未配置时报错
         self._client = None
 
     @property
@@ -177,7 +193,7 @@ class LLMClient:
             (success: bool, analysis_text: str, error_msg: str)
         """
         if not self.is_configured:
-            return False, "", "API 未配置：请在项目根目录 .env 文件中设置 AGNES_API_KEY 和 AGNES_BASE_URL"
+            return False, "", "API 未配置：请在项目根目录 .env 文件中设置 OPENAI_API_KEY 和 OPENAI_BASE_URL"
 
         client = self._get_client()
         if client is None:
