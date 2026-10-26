@@ -1,25 +1,92 @@
 # ============================================================
-# 智能交通检测系统 - 依赖清单
-# 安装: pip install -r requirements.txt
-# 注意: GPU 加速请按 README 说明安装 CUDA 版 PyTorch 与 onnxruntime-gpu
+# 智能交通检测系统 —— 依赖清单
+#
+# 已验证环境：
+#   Windows 11 + conda env "ultralytics310"（D:\Anaconda\envs\ultralytics310）
+#   Python 3.10.20 / torch 2.5.0+cu124 / CUDA 12.4 / cuDNN 9
+#   NVIDIA GeForce RTX 4060 Laptop GPU（compute capability 8.9）
+#
+# 安装：
+#   conda activate ultralytics310
+#   pip install -r requirements.txt
+#
+# ⚠️ 关于 ultralytics（务必先读）
+#   本项目的 ultralytics 以「源码目录」形式内置在仓库根目录 ultralytics/，
+#   是修改版 8.4.123（自定义了 LEDH 检测头、GhostConv 替换、C2PSA_EMA 等）。
+#   由此带来三条约束：
+#     1) 不要执行 pip install ultralytics —— 会与内置版本冲突；
+#     2) 内置版本不经过 pip 安装，所以它的运行依赖必须在本文件里手动补齐
+#        （见第 4 节：PyYAML / requests / scipy / pandas / matplotlib /
+#          seaborn / psutil / py-cpuinfo / tqdm / ultralytics-thop / lap）；
+#     3) 必须在仓库根目录启动程序（python main.py），内置 ultralytics 才能生效。
 # ============================================================
 
-# GUI 界面
-PyQt5>=5.15.9
-pyqtgraph>=0.13.3
+# ------------------------------------------------
+# 1. 核心计算：PyTorch（硬依赖）
+#    app/backend/model.py 顶部即 import torch，
+#    因此即使只做 ONNX 推理、完全不训练，torch 也必须安装。
+#
+# PyPI 默认提供的是 CPU 版；需要 CUDA 12.4 加速请先单独执行：
+#   pip install torch==2.5.0 torchvision==0.20.0 --index-url https://download.pytorch.org/whl/cu124
+# 已经装好 CUDA 版的话本节的版本号与之匹配，pip 不会重复下载。
+# ------------------------------------------------
+torch==2.5.0
+torchvision==0.20.0
 
-# 视觉处理与模型推理
-numpy>=1.24.0
-opencv-python>=4.8.0
-onnxruntime>=1.16.0          # CPU 推理；GPU 环境请卸载后改装 onnxruntime-gpu
-ultralytics>=8.4.123         # 项目已内置修改版 ultralytics/，运行时优先使用内置版本
+# ------------------------------------------------
+# 2. ONNX 推理
+#    有 NVIDIA GPU（需 CUDA 12.x + cuDNN 9）：onnxruntime-gpu
+#    无 GPU：注释掉上面一行，改用下面的 CPU 版（二者不共存）
+# ------------------------------------------------
+onnxruntime-gpu==1.23.2
+# onnxruntime==1.23.2
 
-# 训练（可选，仅重新训练模型时需要）
-# torch>=2.0.0               # GPU 版安装见 https://pytorch.org/get-started/locally/
+# ------------------------------------------------
+# 3. 视觉 / 数值基础库
+# ------------------------------------------------
+numpy==2.0.1
+opencv-python==5.0.0.93
+pillow==11.1.0
 
-# 配置与密钥
-PyYAML>=6.0
-python-dotenv>=1.0.0
+# ------------------------------------------------
+# 4. 内置 ultralytics 的运行依赖
+#    （因为不通过 pip 安装 ultralytics，这些需手动保证，
+#      缺失时会表现为 ImportError 或在首次推理时触发 ultralytics 的自动 pip 安装）
+# ------------------------------------------------
+PyYAML==6.0.3
+requests==2.34.2
+scipy==1.15.3
+pandas==2.3.3
+matplotlib==3.10.9
+seaborn==0.13.2
+psutil==7.2.2
+py-cpuinfo==9.0.0
+tqdm==4.70.0
+ultralytics-thop==2.1.6
+# ByteTrack / BoT-SORT 的线性分配求解器（多目标跟踪必需）
+lap==0.5.13
 
-# 大语言模型（AI 分析）
-openai>=1.0.0
+# ------------------------------------------------
+# 5. GUI
+# ------------------------------------------------
+PyQt5==5.15.11
+pyqtgraph==0.14.0
+
+# ------------------------------------------------
+# 6. 配置与密钥
+#    注意：不要安装名为 dotenv 的包 —— 它与 python-dotenv 提供同名模块，
+#    二者共存时会互相覆盖，症状是 .env 读不到或读到空的配置。
+# ------------------------------------------------
+python-dotenv==1.2.3
+
+# ------------------------------------------------
+# 7. 大语言模型调用（AI 分析功能，openai 兼容接口）
+# ------------------------------------------------
+openai==3.5.0
+
+# ------------------------------------------------
+# 8. 训练 / ONNX 导出（只有重新训练或导出模型时需要）
+# ------------------------------------------------
+onnx==1.22.0
+onnxslim==0.1.96
+# tensorboard==2.21.0        # 可选：可视化训练指标

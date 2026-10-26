@@ -14,9 +14,9 @@ warnings.filterwarnings('ignore')
 
 # ====== 基础配置 ======
 SVAE_DIR = os.path.abspath('./test_results')                     # 所有结果保存根目录
-MODEL_PATH = "./runs/detect/runs/train/yolo11s/weights/best.pt"   # 训练好的模型权重
+MODEL_PATH = "./runs/detect/runs/train/ghost-p2-lh-yolo11n/weights/best.pt"   # 训练好的模型权重
 DATA_YAML = 'data.yaml'                                          # 数据集配置文件
-TEST_NAME = "yolo11s"                                            # 实验名称（写入 CSV 标识）
+TEST_NAME = "ghost-p2-lh-yolo11n"                                            # 实验名称（写入 CSV 标识）
 IMAGE_SIZE = 640                                                 # 推理 / 评估图像尺寸
 DEVICE = 0 if torch.cuda.is_available() else 'cpu'               # 推理设备
 
